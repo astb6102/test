@@ -29,7 +29,7 @@
 #define I2C_STOP_TIMEOUT 100000
 #define I2C_RXFIFO_TIMEOUT 100000
 #define I2C_TIMEOUT_COUNT 10000
-
+extern void updateCANSetupParams(void);
 volatile SYSTEM_Vars_t systemVars;
 //uint16_t position_enc; syh global
 float temp_off_a=2.0948f;
@@ -262,38 +262,46 @@ void SPI_OnceTransaction(void)
  //   {
 //        SPI_readDataNonBlocking(SPIA_BASE);
 //    }
-
+DINT;
     GPIO_writePin(27, 0);
   //  SPI_resetRxFIFO(SPIA_BASE);
   //  SPI_resetTxFIFO(SPIA_BASE);
  //   SPI_clearInterruptStatus(SPIA_BASE, SPI_INT_RXFF);
+     
     SPI_pollingFIFOTransaction(SPIA_BASE, 16U, tx, rx, 4U, 0U);
+   
     GPIO_writePin(27, 1); // CS HIGH
+     EINT;
 
 }
 void SPI_OnceTransaction2(void)
 {
-
+    DINT;
     GPIO_writePin(27, 0);
    // SPI_resetRxFIFO(SPIA_BASE);
   //  SPI_resetTxFIFO(SPIA_BASE);
   //  SPI_clearInterruptStatus(SPIA_BASE, SPI_INT_RXFF);
     SPI_pollingFIFOTransaction(SPIA_BASE, 16U, tx2, rx2, 8U, 0U);
     GPIO_writePin(27, 1); // CS HIGH
+    EINT;
 }
 
 void B_CAN_Interrupt_Check(void)
 {
     SPI_TX_build(0, 0x1050, 1, 0x00000000);
+    DINT;
     SPI_OnceTransaction(); 
+    EINT;
 }
 
 void B_CAN_Interrupt_Check_test(void)
 {
     SPI_TX_build(0, 0x0000, 1, 0x00000000);
+    DINT;
     GPIO_writePin(27, 0);
     SPI_pollingFIFOTransaction(SPIA_BASE, 16U, tx, rx, 4U, 0U);
     GPIO_writePin(27, 1);
+    EINT;
     //SPI_OnceTransaction(); 
 }
 
@@ -1423,7 +1431,56 @@ eeprom_r=EEPROM_readByte(addr);
 
 #if defined(CMD_CAN_EN)
             //MOTOR_Vars_t *objMtr = Motor_getVars(handle);
+           
+           //can a
            updateCANCmdFreq(motorHandle_M1);//syh
+           updateCANSetupParams(); // new
+           
+           static uint8_t step = 0;
+  //can b
+        if(step == 0)
+            B_CAN_Interrupt_Check();
+    
+         else if(step == 1)
+             {
+        if(rx[3] != 0 && rx[3] != 0xFFFF)
+                {
+               SPI_TX_build2(0, 0x8408, 2, rx_data);
+                SPI_OnceTransaction2();
+                DINT;
+                CAN_B_DATA_READ(motorHandle_M1);
+                EINT;
+                clear_flag=1;
+               }
+             }
+    else if(step == 2 && clear_flag==1)
+    {
+        SPI_TX_build(1, 0x1050, 1, 0x00000005);
+        SPI_OnceTransaction();
+        clear_flag=0;
+        tx_build_flag=1;
+    }
+    else if(step == 3 && tx_build_flag==1)
+    {
+        tx_flag1=1;
+        tx_build_flag=0;
+       
+        SPI_TX_build2(1, 0x8008, 2, tx_data);
+        SPI_OnceTransaction2();
+    }
+    else if(step == 4 && tx_flag1==1)
+    {
+        tx_flag1=0;
+        SPI_TX_build(1, 0x10D0, 1, 0x00000001);
+        SPI_OnceTransaction();
+    }
+    step++;
+
+    if(step > 4)
+        step = 0;
+
+
+           
            //SFRA_GUI_runSerialHostComms(&sfra1);// syh
            if(enc_timer==2000)
            {
@@ -1568,47 +1625,8 @@ else
         HAL_readDRVData(motorHandle_M1->halMtrHandle, &drvicVars_M1);
 
 
-static uint8_t step = 0;
 
-    if(step == 0)
-        B_CAN_Interrupt_Check();
-    
-    else if(step == 1)
-    {
-    if(rx[3] != 0 && rx[3] != 0xFFFF)
-    {
-        SPI_TX_build2(0, 0x8408, 2, rx_data);
-        SPI_OnceTransaction2();
-        CAN_B_DATA_READ(motorHandle_M1);
-        clear_flag=1;
-    }
-    }
-    else if(step == 2 && clear_flag==1)
-    {
-        SPI_TX_build(1, 0x1050, 1, 0x00000005);
-        SPI_OnceTransaction();
-        clear_flag=0;
-        tx_build_flag=1;
-    }
-    else if(step == 3 && tx_build_flag==1)
-    {
-        tx_flag1=1;
-        tx_build_flag=0;
-       
-        SPI_TX_build2(1, 0x8008, 2, tx_data);
-        SPI_OnceTransaction2();
-    }
-    else if(step == 4 && tx_flag1==1)
-    {
-        tx_flag1=0;
-        SPI_TX_build(1, 0x10D0, 1, 0x00000001);
-        SPI_OnceTransaction();
-    }
-    step++;
-
-    if(step > 4)
-        step = 0;
-    
+   
 
     
 #else
