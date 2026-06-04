@@ -76,6 +76,8 @@ extern "C"
 #define MSG_DATA_LENGTH             8//syh test
 #define TX_MSG_OBJ_ID               1
 #define RX_MSG_OBJ_ID               2
+#define RX_SETUP_OBJ_ID             4   // 셋업용 수신 메일박스 ID (0x10)
+#define TX_SETUP_OBJ_ID             5
 
 #define CAN_IF2                     2
 
@@ -97,6 +99,9 @@ typedef struct _CANCOM_Obj_
 
     int16_t     txMsgData[8];
     int16_t     rxMsgData[8];
+    int16_t    rxSetupData[4]; // 셋업 파라미터 수신 버퍼
+    int16_t    txSetupData[4]; // [추가] 셋업 파라미터 응답 송신 버퍼
+    bool        flagSetupRxDone;
 
     uint16_t    txMsgCount;       // for debug
     uint16_t    rxMsgCount;       // for debug

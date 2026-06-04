@@ -48,6 +48,9 @@
 #include "motor1_drive.h"
 #include "motor_common.h"
 
+// EEPROM 기록 함수 외부 선언 (sys_main.c 에 정의됨)
+extern void EEPROM_writeFloatByIndex(uint8_t floatIndex, float value);
+
 
 
 
@@ -128,6 +131,15 @@ void HAL_setupCAN(HAL_Handle halHandle)
     CAN_setupMessageObject(obj->canHandle, 3, 0x2, CAN_MSG_FRAME_STD,
                            CAN_MSG_OBJ_TYPE_TX, 0, CAN_MSG_OBJ_TX_INT_ENABLE,
                            MSG_DATA_LENGTH);
+    // Initialize the receive message object 4 for SETUP parameters (ID: 0x10)
+    CAN_setupMessageObject(obj->canHandle, RX_SETUP_OBJ_ID, 0x10,
+                           CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_RX, 0,
+                           CAN_MSG_OBJ_RX_INT_ENABLE, MSG_DATA_LENGTH);
+
+    // [추가] Initialize the transmit message object 5 for SETUP RESPONSE (ID: 0x11)
+    CAN_setupMessageObject(obj->canHandle, TX_SETUP_OBJ_ID, 0x11,
+                           CAN_MSG_FRAME_STD, CAN_MSG_OBJ_TYPE_TX, 0,
+                           CAN_MSG_OBJ_NO_FLAGS, MSG_DATA_LENGTH);
 
     // Start CAN module operations
     CAN_startModule(obj->canHandle);
@@ -382,7 +394,78 @@ void updateCANCmdFreq(MOTOR_Handle handle)
 
     return;
 }
+// 셋업 데이터 처리 및 응답 함수
+void updateCANSetupParams(void)
+{
+    if(canComVars.flagSetupRxDone == true)
+    {
+        // 워드 0: 하위 바이트는 Command, 상위 바이트는 Index
+        uint16_t cmd   = canComVars.rxSetupData[0] & 0x00FF; 
+        uint16_t index = (canComVars.rxSetupData[0] >> 8) & 0x00FF; 
+        
+        union {
+            uint32_t raw;
+            float fVal;
+        } dataCvt;
 
+        // ----------------------------------------------------
+        // Command 1, 2: 파라미터 쓰기 (Write) 모드
+        // ----------------------------------------------------
+        if(cmd == 1 || cmd == 2) 
+        {
+            dataCvt.raw = ((uint32_t)canComVars.rxSetupData[3] << 16) | (uint16_t)canComVars.rxSetupData[2];
+            float receivedValue = dataCvt.fVal;
+
+            // RAM 변수 업데이트
+            switch(index)
+            {
+                case 1: motorVars_M1.pos_Kp = receivedValue; break;
+                case 2: motorVars_M1.pos_Ki = receivedValue; break;
+                case 3: preset1 = receivedValue; break;
+                case 4: preset2 = receivedValue; break;
+                case 5: preset3 = receivedValue; break;
+                default: break;
+            }
+
+            // Command가 1일 경우에만 EEPROM에 영구 저장
+            if(cmd == 1)
+            {
+                EEPROM_writeFloatByIndex(index, receivedValue);
+            }
+        }
+        // ----------------------------------------------------
+        // Command 3: 파라미터 읽기 (Read) 모드
+        // ----------------------------------------------------
+        else if(cmd == 3)
+        {
+            float readValue = 0.0f;
+            
+            // 현재 시스템(RAM)에 적용되어 있는 값 로드
+            switch(index)
+            {
+                case 1: readValue = motorVars_M1.pos_Kp; break;
+                case 2: readValue = motorVars_M1.pos_Ki; break;
+                case 3: readValue = preset1; break;
+                case 4: readValue = preset2; break;
+                case 5: readValue = preset3; break;
+                default: break;
+            }
+            
+            dataCvt.fVal = readValue;
+            
+            // 응답 데이터 패키징 (수신된 명령어와 인덱스를 그대로 에코)
+            canComVars.txSetupData[0] = (index << 8) | cmd; 
+            canComVars.txSetupData[1] = 0x0000;             // Reserved
+            canComVars.txSetupData[2] = (uint16_t)(dataCvt.raw & 0xFFFF);        // LSW
+            canComVars.txSetupData[3] = (uint16_t)((dataCvt.raw >> 16) & 0xFFFF);// MSW
+            
+            // CAN 하드웨어 모듈(CANA_BASE)을 통해 ID 0x11로 즉시 송신
+            CAN_sendMessage(CANA_BASE, TX_SETUP_OBJ_ID, MSG_DATA_LENGTH, (uint16_t *)canComVars.txSetupData);
+        }
+        
+        canComVars.flagSetupRxDone = false;
+    }
+}
 
 void CAN_B_DATA_READ(MOTOR_Handle handle)
 {
@@ -575,6 +658,17 @@ __interrupt void canaISR(void) // can isr syh
 
         // Since the message was received, clear any error flags.
         canComVars. errorFlag = 0;
+    }
+    else if(status == RX_SETUP_OBJ_ID)
+    {
+        // 메일박스 4번에서 데이터 읽기
+        CAN_readMessage(halHandle->canHandle, RX_SETUP_OBJ_ID,
+                        (uint16_t *)(&canComVars.rxSetupData[0]));
+        
+        // 인터럽트 클리어 및 수신 완료 플래그 세팅
+        CAN_clearInterruptStatus(halHandle->canHandle, RX_SETUP_OBJ_ID);
+        canComVars.flagSetupRxDone = true;
+        canComVars.errorFlag = 0;
     }
     // If something unexpected caused the interrupt, this would handle it.
     else
