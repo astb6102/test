@@ -142,5 +142,16 @@ SECTIONS
                         	  LOAD_START(loadStart_SFRA_F32_Data),
                         	  LOAD_END(loadEnd_SFRA_F32_Data),
                         	  LOAD_SIZE(loadSize_SFRA_F32_Data)
+   /* CLA 프로그램 및 데이터 영역 지정 (RAMLSnP에 통합 할당) */
+    Cla1Prog        : > RAMLSnP, ALIGN(2)
+    ClaDataRAM      : > RAMLSnP
+    
+    /* CPU to CLA 메시지 램 지정 */
+    CpuToCla1MsgRAM : > CPUTOCLA_MSGRAM
+    
+    /* CLA to CPU 메시지 램 지정 */
+    Cla1ToCpuMsgRAM : > CLATOCPU_MSGRAM
 
+    /* FPU / 수학 테이블 (필요시 FlashBank0 Code 영역 할당) */
+    CLA1mathTables  : > FLASHBANK0_CODE
 }
