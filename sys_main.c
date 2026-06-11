@@ -95,6 +95,11 @@ const float V_SUPPLY = 5.0f;
     const float B  = -5.775e-7f;
     const float C  = -4.183e-12f;
 
+    volatile bool g_flagEepromSaveReq = false;
+    volatile uint8_t g_eepromSaveIndex = 0;
+    volatile float g_eepromSaveValue = 0.0f;
+    volatile bool g_flagEepromSaveAllReq = false; // 일괄 저장 플래그
+
 // [추가 변수] TCAN4550 16바이트 통신용 버퍼
 uint16_t rxTemp16[16];  // 16워드 수신 임시버퍼
 uint16_t txTemp16[16];  // 16워드 송신 임시버퍼
@@ -422,7 +427,7 @@ uint8_t EEPROM_readByte(uint8_t memAddr)
     while(I2C_isBusBusy(I2CB_BASE));
     
     // 데이터 읽기(Read)
-    I2C_setTargetAddress(I2CB_BASE, 0x51); // Read 모드
+    I2C_setTargetAddress(I2CB_BASE, 0x50); // Read 모드
     I2C_setDataCount(I2CB_BASE, 1);        // 데이터 1바이트
     I2C_setConfig(I2CB_BASE, I2C_CONTROLLER_RECEIVE_MODE);
     I2C_sendStartCondition(I2CB_BASE); 
@@ -1214,7 +1219,7 @@ void main(void)
     runResolver1OffsetsCalculation(motorHandle_M1);
 #endif  // MOTOR1_RESL
 
-
+    HAL_setupCLA(halHandle);
     // enable global interrupts
     HAL_enableGlobalInts(halHandle);
 
@@ -1226,6 +1231,106 @@ void main(void)
     //  dac128sHandle = DAC128S_init(&dac128s);
    // HAL_switchSPICS(motorHandle_M1->halMtrHandle);
          DEVICE_DELAY_US(1.0f);      // delay 1.0us
+// ==============================================================
+    // [추가] 부팅 시 EEPROM에서 주요 파라미터 로드
+    // ==============================================================
+    float tempParam = 0.0f;
+
+    // 1) Kp 파라미터 (Index 1) 로드
+    tempParam = EEPROM_readFloatByIndex(1);
+    // 읽어온 값이 비정상적인 쓰레기값(0xFFFFFFFF 등)이 아닐 경우에만 적용
+    if(tempParam > -10000.0f && tempParam < 10000.0f) {
+        motorVars_M1.pos_Kp = tempParam;
+    } else {
+        motorVars_M1.pos_Kp = 5.0f; // 데이터가 깨졌거나 비어있을 경우 기본값 강제 할당
+    }
+
+    // 2) Ki 파라미터 (Index 2) 로드
+    tempParam = EEPROM_readFloatByIndex(2);
+    if(tempParam > -10000.0f && tempParam < 10000.0f) {
+        motorVars_M1.pos_Ki = tempParam;
+    } else {
+        motorVars_M1.pos_Ki = 0.0f; // 기본값
+    }
+
+    // 3) Preset1 파라미터 (Index 3) 로드
+    tempParam = EEPROM_readFloatByIndex(3);
+    if(tempParam > -100000.0f && tempParam < 100000.0f) {
+        preset1 = tempParam;
+    } else {
+        preset1 = 0.0f; // 기본값
+    }
+
+    // 4) Preset2 파라미터 (Index 4) 로드
+    tempParam = EEPROM_readFloatByIndex(4);
+    if(tempParam > -100000.0f && tempParam < 100000.0f) {
+        preset2 = tempParam;
+    } else {
+        preset2 = 0.0f; // 기본값
+    }
+
+    // 5) Preset3 파라미터 (Index 5) 로드
+    tempParam = EEPROM_readFloatByIndex(5);
+    if(tempParam > -100000.0f && tempParam < 100000.0f) {
+        preset3 = tempParam;
+    } else {
+        preset3 = 0.0f; // 기본값
+    }
+   // ==============================================================
+    // 6) Current_limit 파라미터 (Index 6) 로드
+    // ==============================================================
+    tempParam = EEPROM_readFloatByIndex(6);
+    // 전류값이 정상 범위(예: 0.1A ~ 100.0A) 내에 있는지 방어 로직
+    if(tempParam >= 0.0f && tempParam <= 100.0f) {
+        motorVars_M1.Current_limit = tempParam;
+    } else {
+        motorVars_M1.Current_limit = 1.0f; // 데이터가 깨졌을 경우 초기 기본값(1.0f)
+    }
+
+    // ==============================================================
+    // 7) Torque_limit 파라미터 (Index 7) 로드
+    // ==============================================================
+    tempParam = EEPROM_readFloatByIndex(7);
+    // 토크 제한값이 정상 범위 내에 있는지 방어 로직
+    if(tempParam >= 0.0f && tempParam <= 100.0f) {
+        motorVars_M1.Torque_limit = tempParam;
+    } else {
+        motorVars_M1.Torque_limit = 1.0f; // 데이터가 깨졌을 경우 초기 기본값(1.0f)
+    }
+    // ==============================================================
+    // 8) pos_kp2 파라미터 (Index 8) 로드
+    // ==============================================================
+    tempParam = EEPROM_readFloatByIndex(8);
+    // 값이 0이 아니며, 비정상적인 쓰레기값이 아닐 때만 적용
+    if(tempParam > -10000.0f && tempParam < 10000.0f && tempParam != 0.0f) {
+        poskp_2 = tempParam;
+    } else {
+        poskp_2 = 10.0f; // 0이거나 깨졌을 경우 기본값 10.0f
+    }
+    // ==============================================================
+    // 9) dead_zone 파라미터 (Index 9) 로드
+    // ==============================================================
+    tempParam = EEPROM_readFloatByIndex(9);
+    // 값이 0이 아닐 때만 적용 (정상 범위 조건 포함)
+    if(tempParam > -100.0f && tempParam < 100.0f && tempParam != 0.0f) {
+        motorVars_M1.dead_zone = tempParam;
+    } else {
+        motorVars_M1.dead_zone = 0.2f; // 0이거나 깨졌을 경우 기본값 0.2
+    }
+
+    // ==============================================================
+    // 10) dead_zone_hys 파라미터 (Index 10) 로드
+    // ==============================================================
+    tempParam = EEPROM_readFloatByIndex(10);
+    // 값이 0이 아닐 때만 적용 (정상 범위 조건 포함)
+    if(tempParam > -100.0f && tempParam < 100.0f && tempParam != 0.0f) {
+        motorVars_M1.dead_zone_hys = tempParam;
+    } else {
+        motorVars_M1.dead_zone_hys = 0.1f; // 0이거나 깨졌을 경우 기본값 0.1
+    }
+    // ==============================================================
+
+
 
     // setup SPI for DAC128S
 //    DAC128S_setupSPI(dac128sHandle);
@@ -1573,6 +1678,31 @@ else
 #endif  // CPUTIME_ENABLE
 
         }       // 1ms Timer
+
+if(g_flagEepromSaveReq == true)
+        {
+            EEPROM_writeFloatByIndex(g_eepromSaveIndex, g_eepromSaveValue);
+            g_flagEepromSaveReq = false;
+        }
+
+        // [기능 구현] 전체 파라미터 일괄 저장 (Index 0 명령 수신 시)
+        if(g_flagEepromSaveAllReq == true)
+        {
+            EEPROM_writeFloatByIndex(1, motorVars_M1.pos_Kp);
+            EEPROM_writeFloatByIndex(2, motorVars_M1.pos_Ki);
+            EEPROM_writeFloatByIndex(3, preset1);
+            EEPROM_writeFloatByIndex(4, preset2);
+            EEPROM_writeFloatByIndex(5, preset3);
+            EEPROM_writeFloatByIndex(6, motorVars_M1.Current_limit); 
+            EEPROM_writeFloatByIndex(7, motorVars_M1.Torque_limit);  
+            EEPROM_writeFloatByIndex(8, poskp_2);                    // [수정] 전역 변수 pos_kp2 저장
+            EEPROM_writeFloatByIndex(9, motorVars_M1.dead_zone);     
+            EEPROM_writeFloatByIndex(10, motorVars_M1.dead_zone_hys);
+            g_flagEepromSaveAllReq = false;
+        }
+
+
+
 
 #if defined(CMD_SWITCH_EN)
         outputCmdState(motorHandle_M1);
