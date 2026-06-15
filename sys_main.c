@@ -619,8 +619,8 @@ void main(void)
     int ci;
     motorVars_M1.position_control=0;
     motorVars_M1.position_ang=0;
-    motorVars_M1.dead_zone=0.3;
-    motorVars_M1.dead_zone_hys=0.2;
+    motorVars_M1.dead_zone=0.4;
+    motorVars_M1.dead_zone_hys=0.1;
     motorVars_M1.dead_zone_flag=0;
     motorVars_M1.brake_hall_enable=0;
     motorVars_M1.pos_speed_lim=15;
@@ -630,7 +630,7 @@ void main(void)
   
     motorVars_M1.brake_ahall=0;
     motorVars_M1.est_ahall=0;
-    motorVars_M1.temp_cal_offset=2.18;//2.0948;//2.2;//2.0948;real 
+    motorVars_M1.temp_cal_offset=2.25;//2.0948;//2.2;//2.0948;real 
 
     motorVars_M1.temp_Kp=0.03f;//0.03->0.01
     motorVars_M1.temp_Ki=0.0005f;
@@ -1219,7 +1219,7 @@ void main(void)
     runResolver1OffsetsCalculation(motorHandle_M1);
 #endif  // MOTOR1_RESL
 
-    HAL_setupCLA(halHandle);
+
     // enable global interrupts
     HAL_enableGlobalInts(halHandle);
 
