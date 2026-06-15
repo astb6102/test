@@ -261,7 +261,7 @@ int16_t temp_hallState3=0;
 int16_t temp_hallState4=0;
 int16_t overcount=0;
 int16_t undercount=0;
-float32_t poskp_2=18; //new board 15 -> 25
+float32_t poskp_2=12; //new board 15 -> 25
 float32_t prv_error[3];
 float32_t prv_cmd[3];
 float32_t ffwd_kp=0;
@@ -5430,11 +5430,13 @@ previous_speed = current_speed;
              }*/
 
              if(obj->dead_zone_flag!=1)
-             obj->ffwdValue=ffwd_kp;
+             {}
+            // obj->ffwdValue=ffwd_kp;
             else
-            obj->ffwdValue=0;
+            {}
+          //  obj->ffwdValue=0;
 
-if(flagEnablePosCtrl==0)
+if(flagEnablePosCtrl==0||flagEnablePosCtrl==1)
     {
     if(obj->prv_speed>=0 && obj->speed_reg_Hz<=0)
      {
@@ -5471,7 +5473,7 @@ if(obj->prv_speed<=0 && obj->speed_reg_Hz>=0)
 //PI_setOutMax(obj->piHandle_spd, (float32_t)obj->Current_limit);
 PI_run_series(obj->piHandle_spd,
              obj->speedRef_Hz, obj->speed_reg_Hz,
-              0, (float32_t *)&obj->IsRef_A); // <- original souce
+              obj->ffwdValue, (float32_t *)&obj->IsRef_A); // <- original souce
 /*
 if(fabs(obj->IsRef_A)>obj->Current_limit)  //new board
 {

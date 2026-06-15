@@ -1,116 +1,23 @@
-// motor_foc.cla
 #include "cla_shared.h"
-#include "f28003x_device.h" // 실제 레지스터 정의 헤더
+#include "device.h"
+#include "f28003x_device.h"
 
-#define MAX_VAL(a, b) ((a) > (b) ? (a) : (b))
-#define MIN_VAL(a, b) ((a) < (b) ? (a) : (b))
-// 공유 메모리 변수 실제 선언
-#pragma DATA_SECTION(CpuToCla, "CpuToCla1MsgRAM");
-CPU_TO_CLA_VARS CpuToCla;
-
-#pragma DATA_SECTION(ClaToCpu, "Cla1ToCpuMsgRAM");
-CLA_TO_CPU_VARS ClaToCpu;
-
-// CLA 전용 상태 변수 (CLA 데이터 RAM에 할당)
-float Id_integral;
-float Iq_integral;
-// ---------------------------------------------------------
-// Task 1: ADC 인터럽트(MTR1_ADC_INT_NUM) 발생 시 트리거됨
-// ---------------------------------------------------------
-__interrupt void Cla1Task1 (void)
+__interrupt void Cla1Task1(void)
 {
-    // ---------------------------------------------------------
-    // 1. ADC 레지스터 직접 읽기 및 실제 전류(A) 변환
-    // (hal.h의 MTR1_IU_ADC_BASE = ADCC, SOC = 1)
-    // (hal.h의 MTR1_IV_ADC_BASE = ADCB, SOC = 1)
-    // ---------------------------------------------------------
-    float adc_iu_raw = (float)AdccResultRegs.ADCRESULT1;
-    float adc_iv_raw = (float)AdcbResultRegs.ADCRESULT1;
+    // 1. SPI 엔코더 읽기 명령 송신 (더미 데이터 쓰기)
+    // SPIB 기준 예시이며, 실제 보드의 SPI 베이스 레지스터에 맞추어 변경하세요.
+    SpibRegs.SPITXBUF = 0x0000; 
 
-    // (값 - 오프셋) * 스케일 팩터
-    float I_u = (adc_iu_raw - CpuToCla.I_offset_U) * CpuToCla.I_scale;
-    float I_v = (adc_iv_raw - CpuToCla.I_offset_V) * CpuToCla.I_scale;
-    float I_w = -(I_u + I_v); // 평형 3상 조건 (Iu + Iv + Iw = 0)
+    // 2. SPI 수신 버퍼에 데이터가 찰 때까지 대기 (CLA 백그라운드 블로킹)
+    while(SpibRegs.SPIFFRX.bit.RXFFST == 0);
 
-    ClaToCpu.I_u = I_u;
-    ClaToCpu.I_v = I_v;
-    ClaToCpu.I_w = I_w;
+    // 3. 데이터 읽기 및 마스킹 (예: 13비트 엔코더 스케일링)
+    uint32_t raw_data = SpibRegs.SPIRXBUF;
+    uint32_t enc_val = (raw_data >> 2) & 0x1FFF; // 기존 소스의 마스킹 방식 적용
 
-    // ---------------------------------------------------------
-    // 2. Clarke 변환 (3상 -> 2상 직교)
-    // ---------------------------------------------------------
-    float alpha = I_u;
-    float beta = (I_u + 2.0f * I_v) * 0.577350269f; // 1/sqrt(3)
+    // 4. 결과를 Message RAM에 저장
+    ClaToCpu.encoder_raw = enc_val;
+    ClaToCpu.position_deg = (float)enc_val / 8191.0f * 360.0f;
 
-    // ---------------------------------------------------------
-    // 3. Park 변환 (정지 좌표계 -> 회전 좌표계)
-    // ---------------------------------------------------------
- float sin_theta = CpuToCla.sin_theta;
-    float cos_theta = CpuToCla.cos_theta;
-
-    float Id_meas = alpha * cos_theta + beta * sin_theta;
-    float Iq_meas = -alpha * sin_theta + beta * cos_theta;
-    
-    ClaToCpu.Id_meas = Id_meas;
-    ClaToCpu.Iq_meas = Iq_meas;
-
-    // ---------------------------------------------------------
-    // 4. PI 전류 제어기 (D, Q축)
-    // ---------------------------------------------------------
-    float Id_err = CpuToCla.Id_ref - Id_meas;
-    float Iq_err = CpuToCla.Iq_ref - Iq_meas;
-
-    Id_integral += CpuToCla.Ki_Id * Id_err;
-    Iq_integral += CpuToCla.Ki_Iq * Iq_err;
-
-    // Anti-windup (DC Bus 전압 기반 최대 출력 제한)
-    float max_V = CpuToCla.Vdc_bus * 0.57735f; // 최대 합성 전압
-    if(Id_integral > max_V) Id_integral = max_V;
-    if(Id_integral < -max_V) Id_integral = -max_V;
-    if(Iq_integral > max_V) Iq_integral = max_V;
-    if(Iq_integral < -max_V) Iq_integral = -max_V;
-
-    float Vd_out = (CpuToCla.Kp_Id * Id_err) + Id_integral;
-    float Vq_out = (CpuToCla.Kp_Iq * Iq_err) + Iq_integral;
-
-    // ---------------------------------------------------------
-    // 5. 역 Park 변환 (회전 -> 정지)
-    // ---------------------------------------------------------
-    float V_alpha = Vd_out * cos_theta - Vq_out * sin_theta;
-    float V_beta = Vd_out * sin_theta + Vq_out * cos_theta;
-
-    // ---------------------------------------------------------
-    // 6. SVPWM 듀티 계산 (간략화된 Space Vector)
-    // ---------------------------------------------------------
-    // V_alpha, V_beta를 [-0.5 ~ 0.5] 스케일로 정규화
-    float V_al_norm = V_alpha / CpuToCla.Vdc_bus;
-    float V_be_norm = V_beta / CpuToCla.Vdc_bus;
-
-    // 역 Clarke 변환을 통한 각 상의 지령 전압 계산
-    float Vu = V_al_norm;
-    float Vv = -0.5f * V_al_norm + 0.866025f * V_be_norm; // sqrt(3)/2
-    float Vw = -0.5f * V_al_norm - 0.866025f * V_be_norm;
-
-    // min-max injection (SVPWM 구현을 위한 Common Mode 전압 주입)
-float V_max = MAX_VAL(MAX_VAL(Vu, Vv), Vw);
-    float V_min = MIN_VAL(MIN_VAL(Vu, Vv), Vw);
-    float V_com = -(V_max + V_min) * 0.5f;
-    // Duty 비 계산 (0.0 ~ 1.0)
-    float Duty_U = Vu + V_com + 0.5f;
-    float Duty_V = Vv + V_com + 0.5f;
-    float Duty_W = Vw + V_com + 0.5f;
-
-    // ---------------------------------------------------------
-    // 7. ePWM 레지스터 직접 업데이트
-    // (hal.h의 MTR1_PWM_U_BASE = EPWM1, V = EPWM2, W = EPWM6)
-    // ---------------------------------------------------------
-    uint16_t tbprd = CpuToCla.pwm_period; // 예: USER_M1_PWM_TBPRD_NUM
-
-    // 계산된 Duty 비율을 실제 타이머 주기에 곱하여 CMPA 업데이트
-    EPwm1Regs.CMPA.bit.CMPA = (uint16_t)(Duty_U * tbprd);
-    EPwm2Regs.CMPA.bit.CMPA = (uint16_t)(Duty_V * tbprd);
-    EPwm6Regs.CMPA.bit.CMPA = (uint16_t)(Duty_W * tbprd);
-
-    // 동작 카운트 증가 (디버깅/타임아웃 모니터링용)
     ClaToCpu.isr_tick++;
 }
