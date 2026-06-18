@@ -30,6 +30,8 @@
 #define I2C_RXFIFO_TIMEOUT 100000
 #define I2C_TIMEOUT_COUNT 10000
 extern void updateCANSetupParams(void);
+extern uint32_t Cla1ProgRunStart, Cla1ProgLoadStart, Cla1ProgLoadSize;
+
 volatile SYSTEM_Vars_t systemVars;
 //uint16_t position_enc; syh global
 float temp_off_a=2.0948f;
@@ -619,18 +621,19 @@ void main(void)
     int ci;
     motorVars_M1.position_control=0;
     motorVars_M1.position_ang=0;
-    motorVars_M1.dead_zone=0.4;
+    motorVars_M1.dead_zone=0.5;
     motorVars_M1.dead_zone_hys=0.1;
     motorVars_M1.dead_zone_flag=0;
     motorVars_M1.brake_hall_enable=0;
     motorVars_M1.pos_speed_lim=15;
+    motorVars_M1.ffwdValue=1;
     
     motorVars_M1.Current_limit=1.0f;
     motorVars_M1.Torque_limit=1.0f;
   
     motorVars_M1.brake_ahall=0;
     motorVars_M1.est_ahall=0;
-    motorVars_M1.temp_cal_offset=2.25;//2.0948;//2.2;//2.0948;real 
+    motorVars_M1.temp_cal_offset=2.18;//2.0948;//2.2;//2.0948;real 
 
     motorVars_M1.temp_Kp=0.03f;//0.03->0.01
     motorVars_M1.temp_Ki=0.0005f;
@@ -638,9 +641,9 @@ void main(void)
     motorVars_M1.pos_Ki=0.0f;
     motorVars_M1.posgain_Kp=0.5;//20.0f;//3->20
      // motorVars_M1.posgain_Ki=0.01;//20.0f;//3->20
-    motorVars_M1.flagEnableMTPA=1;
-    motorVars_M1.flagUpdateMTPAParams=1;
-    motorVars_M1.flagEnableFWC=1;
+    motorVars_M1.flagEnableMTPA=0;
+    motorVars_M1.flagUpdateMTPAParams=0;
+    motorVars_M1.flagEnableFWC=0;
     systemVars.gain_factor_kp_id=1.0f;// syh. def 1
     systemVars.gain_factor_ki_id=1.0f;// syh. def 1
 
@@ -1219,7 +1222,8 @@ void main(void)
     runResolver1OffsetsCalculation(motorHandle_M1);
 #endif  // MOTOR1_RESL
 
-
+    memcpy((uint32_t *)&Cla1ProgRunStart, (uint32_t *)&Cla1ProgLoadStart, (uint32_t)&Cla1ProgLoadSize);
+    HAL_setupCLA(halHandle); //cladisable syh.
     // enable global interrupts
     HAL_enableGlobalInts(halHandle);
 
@@ -1486,6 +1490,7 @@ eeprom_r=EEPROM_readByte(addr);
                 //eeprom_r=EEPROM_ReadFloat(100);
                 
                systemVars.counterLEDC = 0;
+               
             }
 
             if(motorVars_M1.motorState >= MOTOR_CL_RUNNING)
@@ -1543,6 +1548,7 @@ eeprom_r=EEPROM_readByte(addr);
            
            static uint8_t step = 0;
   //can b
+ #if 0
         if(step == 0)
             B_CAN_Interrupt_Check();
     
@@ -1583,7 +1589,7 @@ eeprom_r=EEPROM_readByte(addr);
 
     if(step > 4)
         step = 0;
-
+  #endif
 
            
            //SFRA_GUI_runSerialHostComms(&sfra1);// syh
