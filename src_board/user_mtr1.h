@@ -835,7 +835,7 @@ extern "C"
 #elif defined(BSXL8316RT_REVA)
 //! \brief Defines the nominal DC bus voltage, V
 //!
-#define USER_M1_NOMINAL_DC_BUS_VOLTAGE_V         (28.0f)
+#define USER_M1_NOMINAL_DC_BUS_VOLTAGE_V         (32.0f)
 
 //! \brief Defines the maximum voltage at the AD converter
 #define USER_M1_ADC_FULL_SCALE_VOLTAGE_V         (44.28f)
@@ -891,7 +891,7 @@ extern "C"
 #define USER_M1_UNDER_VOLTAGE_NORM_V        (12.0f)
 
 //! \brief motor lost phase current threshold
-#define USER_M1_LOST_PHASE_CURRENT_A        (0.03f)// lost? syh
+#define USER_M1_LOST_PHASE_CURRENT_A        (0.3f)// lost? syh0.03->0.3
 
 //! \brief motor unbalance ratio percent threshold
 #define USER_M1_UNBALANCE_RATIO             (0.2f)
@@ -970,7 +970,7 @@ extern "C"
 
 //! \brief Defines the number of ISR clock ticks per speed controller clock tick
 //!
-#define USER_M1_NUM_ISR_TICKS_PER_SPEED_TICK        (10) //5 control tick?? syh speed
+#define USER_M1_NUM_ISR_TICKS_PER_SPEED_TICK        (5) //5 control tick?? syh speed
 
 
 //! \brief Defines the number of current sensors
@@ -984,7 +984,7 @@ extern "C"
 
 //! \brief Defines the Pulse Width Modulation (PWM) frequency, kHz
 //!
-#define USER_M1_PWM_FREQ_kHz        (20.0f) // syh 15 -> pwm frq10 new board
+#define USER_M1_PWM_FREQ_kHz        (15.0f) // syh 15 -> pwm frq10 new board
 #define USER_M1_PWM_TBPRD_NUM       (uint16_t)(USER_SYSTEM_FREQ_MHz * 1000.0f / USER_M1_PWM_FREQ_kHz / 2.0f)
 
 //! \brief Defines the Pulse Width Modulation (PWM) period, usec
