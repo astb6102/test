@@ -52,12 +52,18 @@
 #include "driverlib.h"
 #include "device.h"
 #include "encoder.h" 
+#include "cla_shared.h"
 
 
 #define N       100
 #define LOG2N   11
 #define PI      3.14159265358979323846f
 #define FS_HZ    1000.0f   // 샘플링 주파수 10 kHz
+
+#pragma DATA_SECTION(CpuToCla, "CpuToCla1MsgRAM");
+CPU_TO_CLA_T CpuToCla;
+#pragma DATA_SECTION(ClaToCpu, "Cla1ToCpuMsgRAM");
+CLA_TO_CPU_T ClaToCpu;
 /*
 #pragma DATA_SECTION(x_re, ".fft_data")
 #pragma DATA_SECTION(x_im, ".fft_data")
@@ -252,7 +258,7 @@ float32_t temp_adj_angle_bac;
 int temp_counter=0;
 
 float32_t ahall_ang_filter;//syh
-float sat_speed=235;
+float sat_speed=200;
 float32_t real_est;
 float32_t temp_analog_cmd;
 int16_t temp_hallState1=0;
@@ -277,15 +283,6 @@ float32_t temp_target2;
 
             //test code 0811
 
-            // QDD virtual spring-damper parameters (Hz domain)
-volatile float Kp_qdd_Hz_per_rad   = 20.0f;   // Hz/rad
-volatile float Kd_qdd_Hz_per_rps   = 1.0f;    // Hz/(rad/s)
-volatile float qdd_speed_sat_Hz    = 200.0f;  // |uqdd_Hz| limit
-volatile float qdd_deadband_deg    = 0.3f;    // deadband for small error
-volatile float contact_speed_th_Hz = 5.0f;    // contact detection speed threshold
-volatile float contact_err_deg_th  = 1.5f;    // contact detection position error threshold (deg)
-volatile float contact_stiff_scale = 0.5f;    // Kp scale in contact
-volatile float kd_boost_scale      = 2.0f;    // Kd scale in contact
 
  // ── IIR 수렴 완료 플래그 추가 ─────────────────────────────
 #define HALL_DC_INIT_SAMPLES   2000   // 1kHz × 2초 = 2000 샘플
@@ -984,7 +981,7 @@ if (fabsf(obj->speedRefHz)  > 10.0f &&
 {
     tempcaloffset = obj->angleESTrad - ahallang;
 }*/
-
+/*
 float getHallAngle(int16_t ahu, int16_t ahv, int16_t ahw)
 {
     // offset cal. syh
@@ -1024,8 +1021,92 @@ float getHallAngle(int16_t ahu, int16_t ahv, int16_t ahw)
 
 
 return theta;
-}
+}*/
 
+float getHallAngle(int16_t ahu, int16_t ahv, int16_t ahw)
+{
+    // 정적(static) 변수로 선언하여 ISR 주기마다 과거의 Max/Min 값을 기억합니다.
+    // (초기값은 상온 기준 일반적인 범위를 주입해두면 빠르게 안정화됩니다)
+    static float max_u = 3900.0f, min_u = 1100.0f;
+    static float max_v = 3900.0f, min_v = 1100.0f;
+    static float max_w = 3900.0f, min_w = 1100.0f;
+    static float theta_prev = 0.0f;
+
+    // -------------------------------------------------------------------
+    // 1. Fast Attack (즉각 확장) 및 실시간 DC 오프셋 갱신
+    // 신호가 현재 범위를 벗어나면 즉각적으로 최대/최소값을 넓힙니다.
+    // -------------------------------------------------------------------
+    if ((float)ahu > max_u) max_u = (float)ahu;
+    if ((float)ahu < min_u) min_u = (float)ahu;
+
+    if ((float)ahv > max_v) max_v = (float)ahv;
+    if ((float)ahv < min_v) min_v = (float)ahv;
+
+    if ((float)ahw > max_w) max_w = (float)ahw;
+    if ((float)ahw < min_w) min_w = (float)ahw;
+
+    // 2. 현재 상태의 DC 오프셋(중심값)과 진폭(Amplitude) 계산
+    float32_t center_u = (max_u + min_u) * 0.5f;
+    float32_t center_v = (max_v + min_v) * 0.5f;
+    float32_t center_w = (max_w + min_w) * 0.5f;
+
+    float32_t amp_u = (max_u - min_u) * 0.5f;
+    float32_t amp_v = (max_v - min_v) * 0.5f;
+    float32_t amp_w = (max_w - min_w) * 0.5f;
+
+    // 진폭 0 나누기 방지 안전장치 (노이즈로 인한 붕괴 방지)
+    if (amp_u < 1.0f) amp_u = 1.0f;
+    if (amp_v < 1.0f) amp_v = 1.0f;
+    if (amp_w < 1.0f) amp_w = 1.0f;
+
+    // 3. 완벽한 중심 기준 정규화 (-1.0 ~ 1.0)
+    float32_t u_norm = ((float32_t)ahu - center_u) / amp_u;
+    float32_t v_norm = ((float32_t)ahv - center_v) / amp_v;
+    float32_t w_norm = ((float32_t)ahw - center_w) / amp_w;
+
+    // 4. 올바른 클라크(Clarke) 변환 공식 (1/sqrt(3) 적용)
+    float32_t alpha = (2.0f * u_norm - v_norm - w_norm) / 3.0f;
+    float32_t beta  = (v_norm - w_norm) * 0.577350269f;
+
+    // 5. 각도 계산
+    float32_t theta = atan2f(beta, alpha);
+    
+    // 캘리브레이션 오프셋 적용
+    theta += motorVars_M1.temp_cal_offset; 
+
+    // 각도 정규화 (-PI ~ PI)
+    if(theta > M_PI) theta -= 2.0f * M_PI;
+    else if(theta < -M_PI) theta += 2.0f * M_PI;
+
+    // -------------------------------------------------------------------
+    // 6. Slow Release (제로 드리프트 및 진폭 수축 자동 보정)
+    // -------------------------------------------------------------------
+    // 이전 각도와의 차이를 계산하여 현재 모터가 회전 중인지 판단
+    float32_t delta_theta = theta - theta_prev;
+    if (delta_theta > M_PI) delta_theta -= 2.0f * M_PI;
+    if (delta_theta < -M_PI) delta_theta += 2.0f * M_PI;
+
+    // 모터가 실제로 움직이고 있을 때만 Envelope를 수축시킵니다 (정지 시 수축하면 값이 붕괴됨)
+    // 0.002 rad 이상 움직일 때만 감쇠 적용
+    if (fabsf(delta_theta) > 0.002f) 
+    {
+        // 10kHz 제어 주기 기준 0.005f는 초당 50 카운트를 수축시킵니다.
+        // 온도 변화는 매우 느리기 때문에 이 정도의 부드러운 수축만으로도 충분히 오프셋을 추적합니다.
+        float32_t decay = 0.005f; 
+
+        // 최소 보장 진폭 (Peak-to-Peak 1000 미만으로는 수축하지 않도록 방어)
+        float32_t min_p2p = 1000.0f;
+
+        if ((max_u - min_u) > min_p2p) { max_u -= decay; min_u += decay; }
+        if ((max_v - min_v) > min_p2p) { max_v -= decay; min_v += decay; }
+        if ((max_w - min_w) > min_p2p) { max_w -= decay; min_w += decay; }
+    }
+    
+    // 다음 주기를 위해 현재 각도 저장
+    theta_prev = theta;
+
+    return theta;
+}
 
 // the control handles for motor 1
 void initMotor1Handles(MOTOR_Handle handle)
@@ -2509,6 +2590,9 @@ __interrupt void motor1CtrlISR(void) //syh ISR_MOTOR
 
     // read the ADC data with offsets
     HAL_readMtr1ADCData(&obj->adcData);
+
+    obj->position_enc = ClaToCpu.encoder_raw;
+    obj->position_ang = ClaToCpu.position_deg;
  /*test code*/
 // 현재 속도 (rad/s 또는 Hz 등 사용하는 단위로 통일 필요)
 /*
@@ -4597,7 +4681,7 @@ previous_speed = current_speed;
     // compute angle with delay compensation
     obj->angleESTCOMP_rad =
             objUser->angleDelayed_sf_sec * obj->estOutputData.fm_lp_rps;
-    ahall_ang_filter=ahall_ang_filter*0.1+obj->ahall_ang*0.9; //new board
+    ahall_ang_filter=ahall_ang_filter*0.2+obj->ahall_ang*0.8; //new board
 
     if(obj->brake_ahall==0)  //syh fast or analog hall -> est_hall (0=analog hall, 1= fast)
     {
@@ -5032,6 +5116,7 @@ previous_speed = current_speed;
  if(timer_e==1)
  {
  obj->position_enc =ReadEncoderSSI(); //new board
+ //CLA_forceTasks(CLA1_BASE, CLA_TASKFLAG_1);
   timer_e=0;
  }
 /*if (timer_e >= 2) {  // 매 2 ISR마다 실행 (30kHz에서도 충분)
@@ -5184,7 +5269,7 @@ previous_speed = current_speed;
 
              if(flagEnablePosCtrl==1) //syh position control
              {
-              obj->accelerationMax_Hzps=32767; 
+              obj->accelerationMax_Hzps=32767;  // syh acc.
               obj->accelerationStart_Hzps=32767; 
 
               //  obj->accelerationMax_Hzps=15000*fabs(obj->position_error/obj->target_pos)+1000; 
@@ -5284,10 +5369,12 @@ previous_speed = current_speed;
 
              //if(position_count>0)
              //{
-             derating2=0.45/obj->Is_A;
-             if(derating2>1) derating2=1;
-             if(derating2<0.7) derating2=0.7;
-               PI_setGains(obj->piHandlepos, obj->pos_Kp, obj->pos_Ki);
+             //temp_del.
+             //derating2=0.45/obj->Is_A;
+             //if(derating2>1) derating2=1;
+             //if(derating2<0.7) derating2=0.7;
+              derating2=1;
+               PI_setGains(obj->piHandlepos, obj->pos_Kp, 0);//obj->pos_Ki);
               PI_setMinMax(obj->piHandlepos, -sat_speed*derating2,sat_speed*derating2); //test syh 12  // new board
               PI_run(obj->piHandlepos, obj->position_error,  0.0f, &obj->speedRef_Hz); //postion pi. syh
              // position_count=0;
@@ -5429,14 +5516,12 @@ previous_speed = current_speed;
              }  
              }*/
 
-             if(obj->dead_zone_flag!=1)
-             {}
-            // obj->ffwdValue=ffwd_kp;
-            else
-            {}
-          //  obj->ffwdValue=0;
+            // if(obj->dead_zone_flag!=1)
+             //obj->ffwdValue=ffwd_kp;
+         //   else
+         //   obj->ffwdValue=0;
 
-if(flagEnablePosCtrl==0||flagEnablePosCtrl==1)
+if(flagEnablePosCtrl==0)
     {
     if(obj->prv_speed>=0 && obj->speed_reg_Hz<=0)
      {
@@ -5469,8 +5554,17 @@ if(obj->prv_speed<=0 && obj->speed_reg_Hz>=0)
 
 
 
-
+/*
 //PI_setOutMax(obj->piHandle_spd, (float32_t)obj->Current_limit);
+float32_t spd_error = obj->speedRef_Hz - obj->speed_reg_Hz;
+
+
+if (fabsf(spd_error) > 50.0f) // 오차가 50Hz 이상 클 때 (기동 초기 등)
+{
+ 
+    PI_setUi(obj->piHandle_spd, PI_getUi(obj->piHandle_spd)); 
+}*/
+
 PI_run_series(obj->piHandle_spd,
              obj->speedRef_Hz, obj->speed_reg_Hz,
               obj->ffwdValue, (float32_t *)&obj->IsRef_A); // <- original souce
@@ -5795,6 +5889,7 @@ PI_run_series(obj->piHandle_spd,
 
 #else     // !SFRA_ENABLE
         // run the Id controller
+
         PI_run_series(obj->piHandle_Id,
                       obj->IdqRef_A.value[0], obj->Idq_in_A.value[0],
                       obj->Vdq_ffwd_V.value[0], (float32_t*)&obj->Vdq_out_V.value[0]);
