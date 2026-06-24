@@ -267,7 +267,7 @@ int16_t temp_hallState3=0;
 int16_t temp_hallState4=0;
 int16_t overcount=0;
 int16_t undercount=0;
-float32_t poskp_2=12; //new board 15 -> 25
+float32_t poskp_2=20; //new board 15 -> 25
 float32_t prv_error[3];
 float32_t prv_cmd[3];
 float32_t ffwd_kp=0;
@@ -4681,7 +4681,7 @@ previous_speed = current_speed;
     // compute angle with delay compensation
     obj->angleESTCOMP_rad =
             objUser->angleDelayed_sf_sec * obj->estOutputData.fm_lp_rps;
-    ahall_ang_filter=ahall_ang_filter*0.2+obj->ahall_ang*0.8; //new board
+    ahall_ang_filter=obj->ahall_ang;//ahall_ang_filter*0.05+obj->ahall_ang*0.95; //new board
 
     if(obj->brake_ahall==0)  //syh fast or analog hall -> est_hall (0=analog hall, 1= fast)
     {
@@ -5115,8 +5115,8 @@ previous_speed = current_speed;
   timer_e++;
  if(timer_e==1)
  {
- obj->position_enc =ReadEncoderSSI(); //new board
- //CLA_forceTasks(CLA1_BASE, CLA_TASKFLAG_1);
+ //obj->position_enc =ReadEncoderSSI(); //new board
+ CLA_forceTasks(CLA1_BASE, CLA_TASKFLAG_1);
   timer_e=0;
  }
 /*if (timer_e >= 2) {  // 매 2 ISR마다 실행 (30kHz에서도 충분)
@@ -5146,7 +5146,7 @@ previous_speed = current_speed;
              obj->target_pos=preset1+((temp_analog_cmd/4096)*preset2); // test 
 
             }
-            obj->position_ang=(float32_t)obj->position_enc/8191*360;
+            //obj->position_ang=(float32_t)obj->position_enc/8191*360;
            // obj->position_ang=obj->abs_deg;//test code
             float32_t angle_delta_deg = obj->position_ang - gEncoderPrevAngle_deg;
             
@@ -5176,7 +5176,7 @@ previous_speed = current_speed;
                     obj->position_error -= 360.0f;
             else if (obj->position_error < -180.0f)
                     obj->position_error += 360.0f; //test code
-                    */
+              */      
            //test code fft
         
            
@@ -5269,8 +5269,8 @@ previous_speed = current_speed;
 
              if(flagEnablePosCtrl==1) //syh position control
              {
-              obj->accelerationMax_Hzps=32767;  // syh acc.
-              obj->accelerationStart_Hzps=32767; 
+              obj->accelerationMax_Hzps=2000;  // syh acc.
+              obj->accelerationStart_Hzps=2000; 
 
               //  obj->accelerationMax_Hzps=15000*fabs(obj->position_error/obj->target_pos)+1000; 
              // obj->accelerationStart_Hzps=15000*fabs(obj->position_error/obj->target_pos)+1000;
@@ -5286,9 +5286,19 @@ previous_speed = current_speed;
           // if(fabs(obj->position_error)>7)
           //     motorVars_M1.pos_Kp=40;//20.0f;//3->20 , 30
          //     else 
-
-               if(fabs(prv_cmd[0]-obj->target_pos)>150)
-               motorVars_M1.pos_Kp=poskp_2*0.5;//20.0f;//3->20 , 40
+if(prv_cmd[0] != obj->target_pos)
+{
+    // 이동 지령이 변경되어 출발하는 순간, 속도 제어기의 적분항(I-term)을 0으로 리셋하여 급발진 방지
+   // PI_setUi(obj->piHandle_spd, 0.0f);
+    
+    // 타겟 150도 이상 차이 날 때 Gain 줄이는 기존 로직
+    if(fabs(prv_cmd[0] - obj->target_pos) > 150) {
+        motorVars_M1.pos_Kp = poskp_2 * 0.5f;
+    } else {
+        motorVars_M1.pos_Kp = poskp_2; // Gain 원복 로직 추가 권장
+    }
+}
+prv_cmd[0] = obj->target_pos;
 
                 prv_cmd[0]=obj->target_pos;
            // if(fabs(obj->position_error)<2)
@@ -5432,7 +5442,7 @@ previous_speed = current_speed;
               if(fabsf(obj->speedRef_Hz)<obj->pos_speed_lim)
                 {
                     /*test code*/
-                    /*
+                /*    
                 if(obj->speedRef_Hz==0)
                  obj->speedRef_Hz=0;
                 if(obj->speedRef_Hz>0)
@@ -5567,7 +5577,7 @@ if (fabsf(spd_error) > 50.0f) // 오차가 50Hz 이상 클 때 (기동 초기 �
 
 PI_run_series(obj->piHandle_spd,
              obj->speedRef_Hz, obj->speed_reg_Hz,
-              obj->ffwdValue, (float32_t *)&obj->IsRef_A); // <- original souce
+              obj->ffwdValue, (float32_t *)&obj->IsRef_A); // <- original souce   obj->speedFilter_Hz obj->speed_reg_Hz,
 /*
 if(fabs(obj->IsRef_A)>obj->Current_limit)  //new board
 {
