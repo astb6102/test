@@ -835,7 +835,7 @@ extern "C"
 #elif defined(BSXL8316RT_REVA)
 //! \brief Defines the nominal DC bus voltage, V
 //!
-#define USER_M1_NOMINAL_DC_BUS_VOLTAGE_V         (32.0f)
+#define USER_M1_NOMINAL_DC_BUS_VOLTAGE_V         (28.0f)
 
 //! \brief Defines the maximum voltage at the AD converter
 #define USER_M1_ADC_FULL_SCALE_VOLTAGE_V         (44.28f)
@@ -849,7 +849,7 @@ extern "C"
 //!                             GAIN = 0.60V/A || 3.3V / 0.60V/A = 5.50A
 //!                             GAIN = 1.20V/A || 3.3V / 1.20V/A = 2.75A
 //! Change this ADC scale current value that must match the CSA gain in hal.c
-#define USER_M1_ADC_FULL_SCALE_CURRENT_A       (11.0f)    // GAIN = 0.15V/A //TEST//newboard
+#define USER_M1_ADC_FULL_SCALE_CURRENT_A       (22.0f)    // GAIN = 0.15V/A //TEST//newboard
 //#define USER_M1_ADC_FULL_SCALE_CURRENT_A         (11.0f)    // GAIN = 0.30V/A
 
 
@@ -891,7 +891,7 @@ extern "C"
 #define USER_M1_UNDER_VOLTAGE_NORM_V        (12.0f)
 
 //! \brief motor lost phase current threshold
-#define USER_M1_LOST_PHASE_CURRENT_A        (0.3f)// lost? syh0.03->0.3
+#define USER_M1_LOST_PHASE_CURRENT_A        (0.01f)// lost? syh0.03->0.3
 
 //! \brief motor unbalance ratio percent threshold
 #define USER_M1_UNBALANCE_RATIO             (0.2f)
@@ -906,7 +906,7 @@ extern "C"
 #define USER_M1_FAULT_CHECK_CURRENT_A       (1.87f)
 
 //! \brief motor failed maximum speed threshold
-#define USER_M1_FAIL_SPEED_MAX_HZ           (210.0f)
+#define USER_M1_FAIL_SPEED_MAX_HZ           (240.0f)
 
 //! \brief motor failed minimum speed threshold
 #define USER_M1_FAIL_SPEED_MIN_HZ           (5.0f)
@@ -1048,9 +1048,9 @@ extern "C"
 //! \brief system requirements that will allow the SVM generator to
 //! \brief go all the way to trapezoidal.
 //!
-#define USER_M1_MAX_VS_MAG_PU             (0.66f)
+#define USER_M1_MAX_VS_MAG_PU             //(0.66f) //new board original
 //#define USER_M1_MAX_VS_MAG_PU             (0.65f)
-//#define USER_M1_MAX_VS_MAG_PU               (0.576f)
+#define USER_M1_MAX_VS_MAG_PU               (0.576f)
 //#define USER_M1_MAX_VS_MAG_PU             (0.565f)
 //#define USER_M1_MAX_VS_MAG_PU             (0.5f)
 
@@ -1131,7 +1131,7 @@ extern "C"
 
 //! \brief Defines the pole location for the speed control filter, rad/sec
 //!
-#define USER_M1_SPEED_POLE_rps                  (100.0f)
+#define USER_M1_SPEED_POLE_rps                  (100.0f)//(100.0f)
 
 
 //! \brief Defines the pole location for the direction filter, rad/sec
@@ -1202,7 +1202,7 @@ extern "C"
 
 //! \brief Defines the number of lost phase setting time
 //!  timer base = 5ms, 10s
-#define USER_M1_LOST_PHASE_TIME_SET             (2000U)
+#define USER_M1_LOST_PHASE_TIME_SET             (4000U) //2000
 
 //! \brief Defines the number of over speed setting time
 //!  timer base = 5ms
@@ -1236,7 +1236,7 @@ extern "C"
 #define USER_M1_QEP_UNIT_TIMER_TICKS        (uint32_t)(USER_SYSTEM_FREQ_MHz/(2.0f * USER_M1_ISR_FREQ_Hz) * 1000000.0f)
 
 //! \brief Defines the current filter pole location, Hz
-#define USER_M1_IS_FILTER_POLE_Hz          (30000.0f)      // 7.5kHz -syh
+#define USER_M1_IS_FILTER_POLE_Hz          (7500.0f)//(30000.0f)      // 7.5kHz -syh
 
 //! \brief Defines the current filter pole location, rad/s
 //!
@@ -1244,7 +1244,7 @@ extern "C"
 
 
 //! \brief Defines the voltage filter pole location, Hz
-#define USER_M1_VS_FILTER_POLE_Hz         (30000.0f)     // 30.0kHz - syh
+#define USER_M1_VS_FILTER_POLE_Hz         (10000.0f)     // 30.0kHz - syh
 
 //! \brief Defines the voltage filter pole location, rad/s
 //!
@@ -2251,7 +2251,7 @@ extern "C"
 #define USER_MOTOR1_MAGNETIZING_CURRENT_A  (NULL)
 #define USER_MOTOR1_RES_EST_CURRENT_A      (0.5f)
 #define USER_MOTOR1_IND_EST_CURRENT_A      (-0.5f)
-#define USER_MOTOR1_MAX_CURRENT_A          (1.0) // syh kp/ki 4->1.4
+#define USER_MOTOR1_MAX_CURRENT_A          (1.2) // syh kp/ki 4->1.4
 #define USER_MOTOR1_FLUX_EXC_FREQ_Hz       (40.0f)
 #define USER_MOTOR1_NUM_ENC_SLOTS          (2000)
 #define USER_MOTOR1_INERTIA_Kgm2           (4.80185e-6)
@@ -2262,15 +2262,15 @@ extern "C"
 #define USER_MOTOR1_Ls_MIN_NUM_COEF        (0.55f)          // 0.5f~1.0f
 
 
-#define USER_MOTOR1_RATED_VOLTAGE_V        (24.0f)
+#define USER_MOTOR1_RATED_VOLTAGE_V        (28.0f)
 #define USER_MOTOR1_FREQ_MIN_Hz            (0.0f)          // Hz
 #define USER_MOTOR1_FREQ_MAX_Hz            (200.0f)        // Hz //new board
-#define USER_MOTOR1_FREQ_NEARZEROLIMIT_Hz  (15.0f)          // Hz // 5-7-15
+#define USER_MOTOR1_FREQ_NEARZEROLIMIT_Hz  (0.0f)          // Hz // 5-7-15
 
 #define USER_MOTOR1_FREQ_LOW_Hz            (0.0f)           // Hz
 #define USER_MOTOR1_FREQ_HIGH_Hz           (200.0f)         // Hz
 #define USER_MOTOR1_VOLT_MIN_V             (2.0f)           // Volt
-#define USER_MOTOR1_VOLT_MAX_V             (24.0f)          // Volt
+#define USER_MOTOR1_VOLT_MAX_V             (28.0f)          // Volt
 
 #define USER_MOTOR1_FORCE_DELTA_A          (0.05f)          // A
 #define USER_MOTOR1_ALIGN_DELTA_A          (0.05f)          // A
@@ -2322,32 +2322,94 @@ extern "C"
 #endif  // MOTOR1_HALL
 
 // Current and Speed PI Regulators Tuning Coefficient
-#define USER_MOTOR1_GAIN_SPEED_LOW_Hz        (10.0f)
-#define USER_MOTOR1_GAIN_SPEED_HIGH_Hz       (225.0f)
+#define USER_MOTOR1_GAIN_SPEED_LOW_Hz        (50.0f)
+#define USER_MOTOR1_GAIN_SPEED_HIGH_Hz       (130.0f) //225
 
 #define USER_MOTOR1_KP_SPD_START_SF          (0.5f)       // 0.1~100.02/2
-#define USER_MOTOR1_KI_SPD_START_SF          (0.1f)       // 0.1~10.0
+#define USER_MOTOR1_KI_SPD_START_SF          (0.5f)       // 0.1~10.0
 
-#define USER_MOTOR1_KP_SPD_LOW_SF            (1.0f)       // 0.1~100.0 1/1
+#define USER_MOTOR1_KP_SPD_LOW_SF            (1.5f)       // 0.1~100.0 1/1
 #define USER_MOTOR1_KI_SPD_LOW_SF            (.5f)       // 0.1~10.0//syh 1 -> 0.5 new board
 
-#define USER_MOTOR1_KP_SPD_HIGH_SF           (5.0f)       // 0.1~100.0 3->4
+#define USER_MOTOR1_KP_SPD_HIGH_SF           (10.0f)       // 0.1~100.0 3->4
 #define USER_MOTOR1_KI_SPD_HIGH_SF           (.5f)       // 0.1~10.0 3->1
 
-#define USER_MOTOR1_GAIN_IQ_LOW_A            (5.0f)
-#define USER_MOTOR1_GAIN_IQ_HIGH_A           (6.0f)
+#define USER_MOTOR1_GAIN_IQ_LOW_A            (0.5f)
+#define USER_MOTOR1_GAIN_IQ_HIGH_A           (1.0f)
+
+#define USER_MOTOR1_KP_IQ_START_SF           (0.5f)       // 0.1~10.0
+#define USER_MOTOR1_KI_IQ_START_SF           (0.5f)       // 0.1~10.0
+
+#define USER_MOTOR1_KP_IQ_LOW_SF             (0.5f)       // 0.1~10.0
+#define USER_MOTOR1_KI_IQ_LOW_SF             (.5f)       // 0.1~10.0//노 적분기본2.0 0.5 
+
+#define USER_MOTOR1_KP_IQ_HIGH_SF            (1.0f)       // 0.1~10.0
+#define USER_MOTOR1_KI_IQ_HIGH_SF            (0.8f)       // 0.1~10.0
+
+#define USER_MOTOR1_KP_ID_SF                 (1.0f)       // 0.1~10.0
+#define USER_MOTOR1_KI_ID_SF                 (0.8f)       // 0.1~10.0
+/*
+15khz
+
+// Current and Speed PI Regulators Tuning Coefficient
+#define USER_MOTOR1_GAIN_SPEED_LOW_Hz        (50.0f)
+#define USER_MOTOR1_GAIN_SPEED_HIGH_Hz       (130.0f) //225
+
+#define USER_MOTOR1_KP_SPD_START_SF          (0.5f)       // 0.1~100.02/2
+#define USER_MOTOR1_KI_SPD_START_SF          (0.5f)       // 0.1~10.0
+
+#define USER_MOTOR1_KP_SPD_LOW_SF            (1.5f)       // 0.1~100.0 1/1
+#define USER_MOTOR1_KI_SPD_LOW_SF            (.5f)       // 0.1~10.0//syh 1 -> 0.5 new board
+
+#define USER_MOTOR1_KP_SPD_HIGH_SF           (10.0f)       // 0.1~100.0 3->4
+#define USER_MOTOR1_KI_SPD_HIGH_SF           (.5f)       // 0.1~10.0 3->1
+
+#define USER_MOTOR1_GAIN_IQ_LOW_A            (0.5f)
+#define USER_MOTOR1_GAIN_IQ_HIGH_A           (1.0f)
+
+#define USER_MOTOR1_KP_IQ_START_SF           (0.5f)       // 0.1~10.0
+#define USER_MOTOR1_KI_IQ_START_SF           (0.5f)       // 0.1~10.0
+
+#define USER_MOTOR1_KP_IQ_LOW_SF             (0.5f)       // 0.1~10.0
+#define USER_MOTOR1_KI_IQ_LOW_SF             (.5f)       // 0.1~10.0//노 적분기본2.0 0.5 
+
+#define USER_MOTOR1_KP_IQ_HIGH_SF            (1.0f)       // 0.1~10.0
+#define USER_MOTOR1_KI_IQ_HIGH_SF            (0.8f)       // 0.1~10.0
+
+#define USER_MOTOR1_KP_ID_SF                 (1.0f)       // 0.1~10.0
+#define USER_MOTOR1_KI_ID_SF                 (0.8f)       // 0.1~10.0
+15khz end
+
+#define USER_MOTOR1_GAIN_SPEED_LOW_Hz        (30.0f)
+#define USER_MOTOR1_GAIN_SPEED_HIGH_Hz       (150.0f) //225
+
+#define USER_MOTOR1_KP_SPD_START_SF          (0.5f)       // 0.1~100.02/2
+#define USER_MOTOR1_KI_SPD_START_SF          (0.05f)       // 0.1~10.0
+
+#define USER_MOTOR1_KP_SPD_LOW_SF            (.5f)       // 0.1~100.0 1/1
+#define USER_MOTOR1_KI_SPD_LOW_SF            (.1f)       // 0.1~10.0//syh 1 -> 0.5 new board
+
+#define USER_MOTOR1_KP_SPD_HIGH_SF           (3.0f)       // 0.1~100.0 3->4
+#define USER_MOTOR1_KI_SPD_HIGH_SF           (.1f)       // 0.1~10.0 3->1
+
+#define USER_MOTOR1_GAIN_IQ_LOW_A            (1.0f)
+#define USER_MOTOR1_GAIN_IQ_HIGH_A           (4.0f)
 
 #define USER_MOTOR1_KP_IQ_START_SF           (0.5f)       // 0.1~10.0
 #define USER_MOTOR1_KI_IQ_START_SF           (0.1f)       // 0.1~10.0
 
-#define USER_MOTOR1_KP_IQ_LOW_SF             (1.0f)       // 0.1~10.0
+#define USER_MOTOR1_KP_IQ_LOW_SF             (0.50f)       // 0.1~10.0
 #define USER_MOTOR1_KI_IQ_LOW_SF             (.5f)       // 0.1~10.0//노 적분기본2.0 0.5 
 
-#define USER_MOTOR1_KP_IQ_HIGH_SF            (2.0f)       // 0.1~10.0
+#define USER_MOTOR1_KP_IQ_HIGH_SF            (.5f)       // 0.1~10.0
 #define USER_MOTOR1_KI_IQ_HIGH_SF            (0.5f)       // 0.1~10.0
 
-#define USER_MOTOR1_KP_ID_SF                 (2.0f)       // 0.1~10.0
-#define USER_MOTOR1_KI_ID_SF                 (2.0f)       // 0.1~10.0
+#define USER_MOTOR1_KP_ID_SF                 (0.5f)       // 0.1~10.0
+#define USER_MOTOR1_KI_ID_SF                 (0.1f)       // 0.1~10.0
+*/
+
+
+
 /*
 #define USER_MOTOR1_GAIN_SPEED_LOW_Hz        (30.0f)
 #define USER_MOTOR1_GAIN_SPEED_HIGH_Hz       (150.0f)
